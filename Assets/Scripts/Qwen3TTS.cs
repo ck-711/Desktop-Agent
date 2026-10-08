@@ -125,6 +125,8 @@ public class Qwen3TTS : MonoBehaviour
 );
 
         Initialize();
+
+        Speak("ÄãºÃ£¬»¶Ó­Ê¹ÓÃ Qwen3-TTS¡£");
     }
 
 
