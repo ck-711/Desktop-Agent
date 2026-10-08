@@ -48,26 +48,34 @@ public class Qwen3TTS : MonoBehaviour
 
     [DllImport(
         "qwen3tts",
-        CallingConvention = CallingConvention.Cdecl)]
+        CallingConvention = CallingConvention.Cdecl,
+        EntryPoint = "qwen3_tts_default_params",
+        ExactSpelling = true)]
     private static extern void qwen3_tts_default_params(
         out Qwen3TtsParams parameters);
 
     [DllImport(
         "qwen3tts",
-        CallingConvention = CallingConvention.Cdecl)]
+        CallingConvention = CallingConvention.Cdecl,
+        EntryPoint = "qwen3_tts_create",
+        ExactSpelling = true)]
     private static extern IntPtr qwen3_tts_create(
         string model_dir,
         int n_threads);
 
     [DllImport(
         "qwen3tts",
-        CallingConvention = CallingConvention.Cdecl)]
+        CallingConvention = CallingConvention.Cdecl,
+        EntryPoint = "qwen3_tts_is_loaded",
+        ExactSpelling = true)]
     private static extern int qwen3_tts_is_loaded(
         IntPtr tts);
 
     [DllImport(
         "qwen3tts",
-        CallingConvention = CallingConvention.Cdecl)]
+        CallingConvention = CallingConvention.Cdecl,
+        EntryPoint = "qwen3_tts_synthesize",
+        ExactSpelling = true)]
     private static extern IntPtr qwen3_tts_synthesize(
         IntPtr tts,
         string text,
@@ -75,19 +83,25 @@ public class Qwen3TTS : MonoBehaviour
 
     [DllImport(
         "qwen3tts",
-        CallingConvention = CallingConvention.Cdecl)]
+        CallingConvention = CallingConvention.Cdecl,
+        EntryPoint = "qwen3_tts_free_audio",
+        ExactSpelling = true)]
     private static extern void qwen3_tts_free_audio(
         IntPtr audio);
 
     [DllImport(
         "qwen3tts",
-        CallingConvention = CallingConvention.Cdecl)]
+        CallingConvention = CallingConvention.Cdecl,
+        EntryPoint = "qwen3_tts_destroy",
+        ExactSpelling = true)]
     private static extern void qwen3_tts_destroy(
         IntPtr tts);
 
     [DllImport(
         "qwen3tts",
-        CallingConvention = CallingConvention.Cdecl)]
+        CallingConvention = CallingConvention.Cdecl,
+        EntryPoint = "qwen3_tts_get_error",
+        ExactSpelling = true)]
     private static extern IntPtr qwen3_tts_get_error(
         IntPtr tts);
 
