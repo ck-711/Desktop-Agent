@@ -1,162 +1,198 @@
 using System;
 using System.Collections.Concurrent;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.UI;
 
-public class Qwen3 : MonoBehaviour
+public sealed class Qwen3 : MonoBehaviour
 {
-    [DllImport(
-        "qwen3",
-        CallingConvention = CallingConvention.Cdecl
-    )]
-    private static extern IntPtr qwen3_create(
-        string modelPath,
-        int nCtx,
-        int nThreads
-    );
+    private const string DllName = "qwen3";
 
+    public string modelPath;
+    public uint contextSize = 4096;
+    public int threadCount = 4;
 
-    [DllImport(
-        "qwen3",
-        CallingConvention = CallingConvention.Cdecl
-    )]
-    private static extern void qwen3_destroy(
-        IntPtr handle
-    );
+    private IntPtr handle = IntPtr.Zero;
+    private volatile bool cancelRequested;
+    private Task generationTask;
+
+    private readonly ConcurrentQueue<string> outputQueue = new();
+
+    public event Action<string> OnText;
+    public event Action<Qwen3Status> OnFinished;
+
+    public enum Qwen3Status
+    {
+        Ok = 0,
+        Cancelled = 1,
+        InvalidArgument = -1,
+        TokenizeFailed = -2,
+        ContextTooSmall = -3,
+        DecodeFailed = -4,
+        PieceFailed = -5,
+    }
+
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate void TokenCallback(
+    private delegate int TokenCallback(
         IntPtr text,
-        int textSize,
-        IntPtr userData
-    );
+        UIntPtr textSize,
+        IntPtr userData);
 
+    private static readonly TokenCallback tokenCallback = OnNativeToken;
 
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr qwen3_create(
+        byte[] modelPath,
+        uint contextSize,
+        int threadCount);
 
-    [DllImport("qwen3", CallingConvention = CallingConvention.Cdecl)]
-    private static extern int qwen3_generate_stream(
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern Qwen3Status qwen3_generate_stream(
         IntPtr handle,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string prompt,
+        UIntPtr promptSize,
         int maxTokens,
         TokenCallback callback,
-        IntPtr userData
-    );
+        IntPtr userData);
 
-    private readonly ConcurrentQueue<string> textQueue = new();
-    private readonly StringBuilder response = new();
-
-    private TokenCallback callback;
-    private bool generating;
-
-    // 替换为你原有的模型句柄
-    private IntPtr handle;
-
-    public Text outputText;
-
-
-    private void Start()
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern void qwen3_destroy(IntPtr handle);
+    private async void Start()
     {
-        string modelPath =
-            Application.streamingAssetsPath +
-            "/models/Qwen3-1.7B-Q4_K_M.gguf";
+        OnText += Debug.Log;
 
-        Debug.Log("Qwen3 model path: " + modelPath);
-
-        handle = qwen3_create(
-            modelPath,
-            4096,
-            8
-        );
-
-        if (handle == IntPtr.Zero)
+        if (await LoadAsync())
         {
-            Debug.LogError("Qwen3 初始化失败");
-            return;
+            Qwen3Status status = await GenerateAsync(
+                "<|im_start|>user\n你好<|im_end|>\n<|im_start|>assistant\n");
+            if (status != Qwen3Status.Ok)
+            {
+                Debug.LogError($"Qwen3 generation failed: {status}");
+            }
+        }
+        else
+        {
+            Debug.LogError($"Qwen3 failed to load model: {modelPath}");
+        }
+    }
+    public async Task<bool> LoadAsync()
+    {
+        modelPath = Path.Combine(
+            Application.streamingAssetsPath,
+            "models",
+            "Qwen3-1.7B-Q4_K_M.gguf");
+        if (handle != IntPtr.Zero)
+        {
+            return true;
         }
 
-        Debug.Log("Qwen3 初始化成功");
+        byte[] path = Utf8NullTerminated(modelPath);
+
+        handle = await Task.Run(() =>
+            qwen3_create(path, contextSize, threadCount));
+
+        return handle != IntPtr.Zero;
+    }
+
+    public async Task<Qwen3Status> GenerateAsync(string prompt)
+    {
+        if (handle == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("Call LoadAsync first.");
+        }
+
+        if (generationTask != null && !generationTask.IsCompleted)
+        {
+            throw new InvalidOperationException("Generation is already running.");
+        }
+
+        cancelRequested = false;
+        GCHandle selfHandle = GCHandle.Alloc(this);
+
+        Qwen3Status result = Qwen3Status.InvalidArgument;
+
+        generationTask = Task.Run(() =>
+        {
+            try
+            {
+                result = qwen3_generate_stream(
+                    handle,
+                    prompt,
+                    (UIntPtr)Encoding.UTF8.GetByteCount(prompt),
+                    512,
+                    tokenCallback,
+                    GCHandle.ToIntPtr(selfHandle));
+            }
+            finally
+            {
+                selfHandle.Free();
+            }
+        });
+
+        await generationTask;
+        OnFinished?.Invoke(result);
+        return result;
+    }
+
+    public void Cancel()
+    {
+        cancelRequested = true;
+    }
+
+    private static int OnNativeToken(
+        IntPtr text,
+        UIntPtr textSize,
+        IntPtr userData)
+    {
+        var self = (Qwen3)GCHandle.FromIntPtr(userData).Target;
+        if (self.cancelRequested || text == IntPtr.Zero)
+        {
+            return 1;
+        }
+
+        ulong size = textSize.ToUInt64();
+        if (size == 0 || size > int.MaxValue)
+        {
+            return 1;
+        }
+
+        byte[] bytes = new byte[(int)size];
+        Marshal.Copy(text, bytes, 0, bytes.Length);
+        self.outputQueue.Enqueue(Encoding.UTF8.GetString(bytes));
+        return 0;
     }
 
     private void Update()
     {
-        bool changed = false;
-
-        while (textQueue.TryDequeue(out string chunk))
+        while (outputQueue.TryDequeue(out string text))
         {
-            response.Append(chunk);
-            changed = true;
-        }
-
-        if (changed && outputText != null)
-        {
-            outputText.text = response.ToString();
-        }
-    }
-    public async void GenerateStream(string prompt)
-    {
-        if (generating || handle == IntPtr.Zero)
-            return;
-
-        generating = true;
-        response.Clear();
-
-        while (textQueue.TryDequeue(out _)) { }
-
-        if (outputText != null)
-            outputText.text = "";
-
-        // 保持委托存活，直到原生函数返回
-        callback = OnToken;
-
-        try
-        {
-            int result = await Task.Run(() =>
-                qwen3_generate_stream(
-                    handle,
-                    prompt,
-                    512,
-                    callback,
-                    IntPtr.Zero
-                )
-            );
-
-            if (result != 0)
-            {
-                Debug.LogError($"Qwen3 流式生成失败，错误码：{result}");
-            }
-        }
-        finally
-        {
-            generating = false;
+            OnText?.Invoke(text);
         }
     }
 
-    private void OnToken(
-    IntPtr text,
-    int textSize,
-    IntPtr userData
-)
+    private async void OnDestroy()
     {
-        if (text == IntPtr.Zero || textSize <= 0)
-            return;
+        cancelRequested = true;
 
-        byte[] bytes = new byte[textSize];
-        Marshal.Copy(text, bytes, 0, textSize);
+        if (generationTask != null)
+        {
+            await generationTask;
+        }
 
-        string chunk = Encoding.UTF8.GetString(bytes);
-
-        textQueue.Enqueue(chunk);
-    }
-
-
-    private void OnDestroy()
-    {
         if (handle != IntPtr.Zero)
         {
             qwen3_destroy(handle);
             handle = IntPtr.Zero;
         }
+    }
+
+    private static byte[] Utf8NullTerminated(string value)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);
+        Array.Resize(ref bytes, bytes.Length + 1);
+        return bytes;
     }
 }
