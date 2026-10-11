@@ -15,6 +15,8 @@ public sealed class Qwen3 : MonoBehaviour
     public string modelPath;
     public uint contextSize = 4096;
     public int threadCount = 4;
+    [Tooltip("0 uses CPU only; a positive value offloads that many layers; a negative value offloads all layers to the GPU.")]
+    public int gpuLayerCount = -1;
 
     private IntPtr handle = IntPtr.Zero;
     private volatile bool cancelRequested;
@@ -48,7 +50,8 @@ public sealed class Qwen3 : MonoBehaviour
     private static extern IntPtr qwen3_create(
         byte[] modelPath,
         uint contextSize,
-        int threadCount);
+        int threadCount,
+        int gpuLayerCount);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern Qwen3Status qwen3_generate_stream(
@@ -82,7 +85,7 @@ public sealed class Qwen3 : MonoBehaviour
         byte[] path = Utf8NullTerminated(modelPath);
 
         handle = await Task.Run(() =>
-            qwen3_create(path, contextSize, threadCount));
+            qwen3_create(path, contextSize, threadCount, gpuLayerCount));
 
         return handle != IntPtr.Zero;
     }

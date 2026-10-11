@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
@@ -120,6 +121,15 @@ public class Qwen3TTS : MonoBehaviour
     [SerializeField]
     private int nThreads = 4;
 
+    [SerializeField]
+    [Tooltip("Uses the CUDA backend for all Qwen3-TTS model components. Falls back to CPU if CUDA is unavailable.")]
+    private bool useGpu = true;
+
+    [SerializeField]
+    [Min(0)]
+    [Tooltip("Zero-based CUDA device index used when GPU acceleration is enabled.")]
+    private int gpuDeviceIndex = 0;
+
 
     // C++ Qwen3Tts*
     private IntPtr ttsHandle = IntPtr.Zero;
@@ -174,6 +184,8 @@ public class Qwen3TTS : MonoBehaviour
         // 2. 获取默认参数
         // -----------------------------------------------------
 
+        ConfigureBackend();
+
         qwen3_tts_default_params(out parameters);
 
         // 可以根据需要修改
@@ -224,6 +236,20 @@ public class Qwen3TTS : MonoBehaviour
     // =========================================================
     // 文本 → 语音
     // =========================================================
+
+    private void ConfigureBackend()
+    {
+        Environment.SetEnvironmentVariable(
+            "QWEN3_TTS_BACKEND",
+            useGpu ? "cuda" : "cpu");
+        Environment.SetEnvironmentVariable(
+            "QWEN3_TTS_DEVICE",
+            useGpu
+                ? gpuDeviceIndex.ToString(CultureInfo.InvariantCulture)
+                : null);
+    }
+
+
 
     public void Speak(string text)
     {
