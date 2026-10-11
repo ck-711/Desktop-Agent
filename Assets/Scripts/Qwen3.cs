@@ -25,8 +25,6 @@ public sealed class Qwen3 : MonoBehaviour
     public event Action<string> OnText;
     public event Action<Qwen3Status> OnFinished;
 
-    public Text outputText;
-
     public enum Qwen3Status
     {
         Ok = 0,
@@ -65,18 +63,7 @@ public sealed class Qwen3 : MonoBehaviour
     private static extern void qwen3_destroy(IntPtr handle);
     private async void Start()
     {
-        OnText += UpdateText;
-
-        if (await LoadAsync())
-        {
-            Qwen3Status status = await GenerateAsync(
-                "<|im_start|>user\n你好<|im_end|>\n<|im_start|>assistant\n");
-            if (status != Qwen3Status.Ok)
-            {
-                Debug.LogError($"Qwen3 generation failed: {status}");
-            }
-        }
-        else
+        if (!await LoadAsync())
         {
             Debug.LogError($"Qwen3 failed to load model: {modelPath}");
         }
@@ -191,7 +178,6 @@ public sealed class Qwen3 : MonoBehaviour
             handle = IntPtr.Zero;
         }
 
-        OnText -= UpdateText;
     }
 
     private static byte[] Utf8NullTerminated(string value)
@@ -201,9 +187,4 @@ public sealed class Qwen3 : MonoBehaviour
         return bytes;
     }
 
-
-    private void UpdateText(string text)
-    {
-        outputText.text += text;
-    }
 }
