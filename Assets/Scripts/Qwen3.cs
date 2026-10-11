@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.UI;
 
 public sealed class Qwen3 : MonoBehaviour
 {
@@ -23,6 +24,8 @@ public sealed class Qwen3 : MonoBehaviour
 
     public event Action<string> OnText;
     public event Action<Qwen3Status> OnFinished;
+
+    public Text outputText;
 
     public enum Qwen3Status
     {
@@ -62,7 +65,7 @@ public sealed class Qwen3 : MonoBehaviour
     private static extern void qwen3_destroy(IntPtr handle);
     private async void Start()
     {
-        OnText += Debug.Log;
+        OnText += UpdateText;
 
         if (await LoadAsync())
         {
@@ -187,6 +190,8 @@ public sealed class Qwen3 : MonoBehaviour
             qwen3_destroy(handle);
             handle = IntPtr.Zero;
         }
+
+        OnText -= UpdateText;
     }
 
     private static byte[] Utf8NullTerminated(string value)
@@ -194,5 +199,11 @@ public sealed class Qwen3 : MonoBehaviour
         byte[] bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);
         Array.Resize(ref bytes, bytes.Length + 1);
         return bytes;
+    }
+
+
+    private void UpdateText(string text)
+    {
+        outputText.text += text;
     }
 }

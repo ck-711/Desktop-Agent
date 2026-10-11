@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 [DisallowMultipleComponent]
 public sealed class Drag : MonoBehaviour
@@ -35,6 +36,11 @@ public sealed class Drag : MonoBehaviour
 
     private void BeginDrag()
     {
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+        {
+            return;
+        }
+
         mainCamera = Camera.main;
         if (mainCamera == null)
         {

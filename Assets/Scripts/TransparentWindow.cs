@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 public class TransparentWindow : MonoBehaviour {
 
@@ -11,6 +12,12 @@ public class TransparentWindow : MonoBehaviour {
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetActiveWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT point);
+
+    [DllImport("user32.dll")]
+    private static extern bool ScreenToClient(IntPtr hWnd, ref POINT point);
 
     [DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, uint dwNewLong);
@@ -28,6 +35,11 @@ public class TransparentWindow : MonoBehaviour {
         public int cyBottomHeight;
     }
 
+    private struct POINT {
+        public int x;
+        public int y;
+    }
+
     [DllImport("Dwmapi.dll")]
     private static extern uint DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS margins);
 
@@ -41,6 +53,8 @@ public class TransparentWindow : MonoBehaviour {
     const uint LWA_COLORKEY = 0x00000001;
 
     private IntPtr hWnd;
+    private readonly List<RaycastResult> uiRaycastResults = new List<RaycastResult>();
+    private RectTransform menuRect;
 
     private void Start() {
         //MessageBox(new IntPtr(0), "Hello World!", "Hello Dialog", 0);
@@ -67,10 +81,45 @@ public class TransparentWindow : MonoBehaviour {
             return;
         }
 
-        SetClickthrough(
-            !Physics.Raycast(mainCamera.ScreenPointToRay(Input.mousePosition))
-        );
+        SetClickthrough(!IsPointerOverInteractiveContent(mainCamera));
 #endif
+    }
+
+    public void SetMenu(RectTransform menu) {
+        menuRect = menu;
+    }
+
+    private bool IsPointerOverInteractiveContent(Camera mainCamera) {
+        Vector2 pointerPosition = GetPointerScreenPosition();
+        if (menuRect != null && menuRect.gameObject.activeInHierarchy &&
+            RectTransformUtility.RectangleContainsScreenPoint(menuRect, pointerPosition, mainCamera)) {
+            return true;
+        }
+
+        if (Physics.Raycast(mainCamera.ScreenPointToRay(pointerPosition))) {
+            return true;
+        }
+
+        EventSystem eventSystem = EventSystem.current;
+        if (eventSystem == null) {
+            return false;
+        }
+
+        uiRaycastResults.Clear();
+        var pointerEventData = new PointerEventData(eventSystem) {
+            position = pointerPosition
+        };
+        eventSystem.RaycastAll(pointerEventData, uiRaycastResults);
+        return uiRaycastResults.Count > 0;
+    }
+
+    private Vector2 GetPointerScreenPosition() {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        if (GetCursorPos(out POINT point) && ScreenToClient(hWnd, ref point)) {
+            return new Vector2(point.x, Screen.height - point.y);
+        }
+#endif
+        return Input.mousePosition;
     }
 
     private void SetClickthrough(bool clickthrough) {
