@@ -2992,7 +2992,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1679321031}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0a1846880b556c347a958e35c42ee8a9, type: 3}
   m_Name: 
@@ -3026,7 +3026,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1679321031}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b10dd13cacc446a41967cdcf7d23eabc, type: 3}
   m_Name: 
@@ -3034,6 +3034,8 @@ MonoBehaviour:
   modelPath: 
   audioSource: {fileID: 818079015}
   nThreads: 4
+  customSpeaker: klee
+  referenceAudioPath: 
   useGpu: 1
   gpuDeviceIndex: 0
 --- !u!1 &1687997527

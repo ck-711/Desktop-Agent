@@ -7,8 +7,8 @@ using UnityEngine;
 public class Qwen3TTS : MonoBehaviour
 {
     // =========================================================
-    // C++ ²ÎÊı½á¹¹Ìå
-    // ¶ÔÓ¦ qwen3tts_c_api.cpp ÖĞµÄ Qwen3TtsParams
+    // C++ å‚æ•°ç»“æ„ä½“
+    // å¯¹åº” qwen3tts_c_api.cpp ä¸­çš„ Qwen3TtsParams
     // =========================================================
 
     [StructLayout(LayoutKind.Sequential)]
@@ -24,9 +24,9 @@ public class Qwen3TTS : MonoBehaviour
     }
 
     // =========================================================
-    // C++ ÒôÆµ½á¹¹Ìå
+    // C++ éŸ³é¢‘ç»“æ„ä½“
     //
-    // ¶ÔÓ¦£º
+    // å¯¹åº”ï¼š
     //
     // struct Qwen3TtsAudio {
     //     const float * samples;
@@ -85,6 +85,28 @@ public class Qwen3TTS : MonoBehaviour
     [DllImport(
         "qwen3tts",
         CallingConvention = CallingConvention.Cdecl,
+        EntryPoint = "qwen3_tts_synthesize_custom_voice",
+        ExactSpelling = true)]
+    private static extern IntPtr qwen3_tts_synthesize_custom_voice(
+        IntPtr tts,
+        string text,
+        string speaker,
+        ref Qwen3TtsParams parameters);
+
+    [DllImport(
+        "qwen3tts",
+        CallingConvention = CallingConvention.Cdecl,
+        EntryPoint = "qwen3_tts_synthesize_with_voice_file",
+        ExactSpelling = true)]
+    private static extern IntPtr qwen3_tts_synthesize_with_voice_file(
+        IntPtr tts,
+        string text,
+        string referenceAudioPath,
+        ref Qwen3TtsParams parameters);
+
+    [DllImport(
+        "qwen3tts",
+        CallingConvention = CallingConvention.Cdecl,
         EntryPoint = "qwen3_tts_free_audio",
         ExactSpelling = true)]
     private static extern void qwen3_tts_free_audio(
@@ -122,6 +144,14 @@ public class Qwen3TTS : MonoBehaviour
     private int nThreads = 4;
 
     [SerializeField]
+    [Tooltip("Named CustomVoice speaker stored in the GGUF metadata, for example klee. Leave empty for Base/clone mode.")]
+    private string customSpeaker = "";
+
+    [SerializeField]
+    [Tooltip("Optional WAV reference for voice cloning. Relative paths are resolved from StreamingAssets.")]
+    private string referenceAudioPath = "";
+
+    [SerializeField]
     [Tooltip("Uses the CUDA backend for all Qwen3-TTS model components. Falls back to CPU if CUDA is unavailable.")]
     private bool useGpu = true;
 
@@ -138,7 +168,7 @@ public class Qwen3TTS : MonoBehaviour
 
 
     // =========================================================
-    // ³õÊ¼»¯
+    // åˆå§‹åŒ–
     // =========================================================
 
     private void Start()
@@ -150,7 +180,7 @@ public class Qwen3TTS : MonoBehaviour
 
         Initialize();
 
-        Speak("ÄãºÃ£¬»¶Ó­Ê¹ÓÃ Qwen3-TTS¡£");
+        Speak("ä½ å¥½ï¼Œæ¬¢è¿ä½¿ç”¨ Qwen3-TTSã€‚");
     }
 
 
@@ -163,7 +193,7 @@ public class Qwen3TTS : MonoBehaviour
         }
 
         // -----------------------------------------------------
-        // 1. ¼ì²éÄ£ĞÍÂ·¾¶
+        // 1. æ£€æŸ¥æ¨¡å‹è·¯å¾„
         // -----------------------------------------------------
 
         if (string.IsNullOrEmpty(modelPath))
@@ -181,18 +211,18 @@ public class Qwen3TTS : MonoBehaviour
         }
 
         // -----------------------------------------------------
-        // 2. »ñÈ¡Ä¬ÈÏ²ÎÊı
+        // 2. è·å–é»˜è®¤å‚æ•°
         // -----------------------------------------------------
 
         ConfigureBackend();
 
         qwen3_tts_default_params(out parameters);
 
-        // ¿ÉÒÔ¸ù¾İĞèÒªĞŞ¸Ä
+        // å¯ä»¥æ ¹æ®éœ€è¦ä¿®æ”¹
         parameters.n_threads = nThreads;
 
         // -----------------------------------------------------
-        // 3. ´´½¨ Qwen3-TTS
+        // 3. åˆ›å»º Qwen3-TTS
         // -----------------------------------------------------
 
         Debug.Log(
@@ -203,7 +233,7 @@ public class Qwen3TTS : MonoBehaviour
             nThreads);
 
         // -----------------------------------------------------
-        // 4. ¼ì²éÊÇ·ñ¼ÓÔØ³É¹¦
+        // 4. æ£€æŸ¥æ˜¯å¦åŠ è½½æˆåŠŸ
         // -----------------------------------------------------
 
         if (ttsHandle == IntPtr.Zero)
@@ -234,7 +264,7 @@ public class Qwen3TTS : MonoBehaviour
 
 
     // =========================================================
-    // ÎÄ±¾ ¡ú ÓïÒô
+    // æ–‡æœ¬ â†’ è¯­éŸ³
     // =========================================================
 
     private void ConfigureBackend()
@@ -270,16 +300,51 @@ public class Qwen3TTS : MonoBehaviour
         Debug.Log($"Qwen3-TTS: {text}");
 
         // -----------------------------------------------------
-        // µ÷ÓÃ C++
+        // è°ƒç”¨ C++
         // -----------------------------------------------------
 
-        IntPtr audioPtr = qwen3_tts_synthesize(
-            ttsHandle,
-            text,
-            ref parameters);
+        IntPtr audioPtr;
+        if (!string.IsNullOrWhiteSpace(customSpeaker))
+        {
+            audioPtr = qwen3_tts_synthesize_custom_voice(
+                ttsHandle,
+                text,
+                customSpeaker.Trim(),
+                ref parameters);
+        }
+        else if (!string.IsNullOrWhiteSpace(referenceAudioPath))
+        {
+            string resolvedReferencePath = referenceAudioPath;
+            if (!Path.IsPathRooted(resolvedReferencePath))
+            {
+                resolvedReferencePath = Path.Combine(
+                    Application.streamingAssetsPath,
+                    resolvedReferencePath);
+            }
+
+            if (!File.Exists(resolvedReferencePath))
+            {
+                Debug.LogError(
+                    $"Qwen3-TTS reference audio does not exist:\n{resolvedReferencePath}");
+                return;
+            }
+
+            audioPtr = qwen3_tts_synthesize_with_voice_file(
+                ttsHandle,
+                text,
+                resolvedReferencePath,
+                ref parameters);
+        }
+        else
+        {
+            audioPtr = qwen3_tts_synthesize(
+                ttsHandle,
+                text,
+                ref parameters);
+        }
 
         // -----------------------------------------------------
-        // ÅĞ¶ÏÊÇ·ñ³É¹¦
+        // åˆ¤æ–­æ˜¯å¦æˆåŠŸ
         // -----------------------------------------------------
 
         if (audioPtr == IntPtr.Zero)
@@ -291,7 +356,7 @@ public class Qwen3TTS : MonoBehaviour
         try
         {
             // -------------------------------------------------
-            // ¶ÁÈ¡ C++ Qwen3TtsAudio
+            // è¯»å– C++ Qwen3TtsAudio
             // -------------------------------------------------
 
             Qwen3TtsAudio audio =
@@ -315,7 +380,7 @@ public class Qwen3TTS : MonoBehaviour
 
 
             // -------------------------------------------------
-            // C++ float* ¡ú C# float[]
+            // C++ float* â†’ C# float[]
             // -------------------------------------------------
 
             float[] pcm =
@@ -329,7 +394,7 @@ public class Qwen3TTS : MonoBehaviour
 
 
             // -------------------------------------------------
-            // ´´½¨ Unity AudioClip
+            // åˆ›å»º Unity AudioClip
             // -------------------------------------------------
 
             AudioClip clip =
@@ -342,7 +407,7 @@ public class Qwen3TTS : MonoBehaviour
 
 
             // -------------------------------------------------
-            // ÉèÖÃ PCM Êı¾İ
+            // è®¾ç½® PCM æ•°æ®
             // -------------------------------------------------
 
             clip.SetData(
@@ -351,7 +416,7 @@ public class Qwen3TTS : MonoBehaviour
 
 
             // -------------------------------------------------
-            // ²¥·Å
+            // æ’­æ”¾
             // -------------------------------------------------
 
             if (audioSource != null)
@@ -368,10 +433,10 @@ public class Qwen3TTS : MonoBehaviour
         finally
         {
             // -------------------------------------------------
-            // ·Ç³£ÖØÒª£¡
+            // éå¸¸é‡è¦ï¼
             //
-            // C++ ÖĞÊ¹ÓÃ new ·ÖÅäµÄÒôÆµÄÚ´æ
-            // ±ØĞë½»¸ø C++ ×Ô¼ºÊÍ·Å
+            // C++ ä¸­ä½¿ç”¨ new åˆ†é…çš„éŸ³é¢‘å†…å­˜
+            // å¿…é¡»äº¤ç»™ C++ è‡ªå·±é‡Šæ”¾
             // -------------------------------------------------
 
             qwen3_tts_free_audio(audioPtr);
@@ -380,7 +445,7 @@ public class Qwen3TTS : MonoBehaviour
 
 
     // =========================================================
-    // ´íÎóĞÅÏ¢
+    // é”™è¯¯ä¿¡æ¯
     // =========================================================
 
     private void PrintError()
@@ -413,7 +478,7 @@ public class Qwen3TTS : MonoBehaviour
 
 
     // =========================================================
-    // Ïú»Ù
+    // é”€æ¯
     // =========================================================
 
     private void OnDestroy()
