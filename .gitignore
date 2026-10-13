@@ -116,3 +116,6 @@ InitTestScene*.unity*
 
 *.gguf
 *.safetensors
+
+# Distributed with Release builds, but not stored in Git/LFS.
+/Assets/Plugins/x86_64/qwen3tts.dll
