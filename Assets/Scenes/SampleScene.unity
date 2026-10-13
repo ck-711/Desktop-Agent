@@ -2913,6 +2913,7 @@ GameObject:
   - component: {fileID: 1679321036}
   - component: {fileID: 1679321038}
   - component: {fileID: 1679321037}
+  - component: {fileID: 1679321039}
   m_Layer: 0
   m_Name: Klee
   m_TagString: Untagged
@@ -3041,6 +3042,28 @@ MonoBehaviour:
   referenceAudioPath: 
   useGpu: 1
   gpuDeviceIndex: 0
+--- !u!114 &1679321039
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1679321031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f1f4a9553464f4d9cbf8cb0c218f6d4, type: 3}
+  m_Name: Qwen3TTSLipSync
+  m_EditorClassIdentifier: Assembly-CSharp::Qwen3TTSLipSync
+  audioSource: {fileID: 818079015}
+  vrm: {fileID: 0}
+  profile: {fileID: 11400000, guid: 7dc12fd6ef4b4724e9c6a8b754da69b4, type: 2}
+  phonemeA: A
+  phonemeI: I
+  phonemeU: U
+  phonemeE: E
+  phonemeO: O
+  mouthGain: 1
+  smoothing: 0.05
 --- !u!1 &1687997527
 GameObject:
   m_ObjectHideFlags: 0

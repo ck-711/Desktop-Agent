@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -211,6 +212,8 @@ public class Qwen3TTS : MonoBehaviour
                           synthesisQueue.Count > 0 ||
                           playbackQueue.Count > 0;
 
+    public AudioSource PlaybackAudioSource => audioSource;
+
 
     // =========================================================
     // 初始化
@@ -330,6 +333,7 @@ public class Qwen3TTS : MonoBehaviour
 
     public void EnqueueSpeech(string text)
     {
+        text = SanitizeSpeechText(text);
         if (!HasSpeakableContent(text))
         {
             return;
@@ -401,6 +405,27 @@ public class Qwen3TTS : MonoBehaviour
         }
 
         return false;
+    }
+
+    private static string SanitizeSpeechText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        StringBuilder builder = new StringBuilder(text.Length);
+        foreach (char character in text)
+        {
+            if (char.IsLetterOrDigit(character) ||
+                char.IsWhiteSpace(character) ||
+                char.IsPunctuation(character))
+            {
+                builder.Append(character);
+            }
+        }
+
+        return builder.ToString().Trim();
     }
 
     private async Task ProcessSynthesisQueueAsync()
