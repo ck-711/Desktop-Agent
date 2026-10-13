@@ -2992,7 +2992,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1679321031}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0a1846880b556c347a958e35c42ee8a9, type: 3}
   m_Name: 
@@ -3015,6 +3015,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Orchestrator
   inputField: {fileID: 2039197577}
   qwen3: {fileID: 1679321036}
+  qwen3TTS: {fileID: 1679321038}
   outputText: {fileID: 1687997528}
   think: 1
   systemPrompt: "\u4F60\u662F\u4E00\u4E2A\u7B80\u6D01\u3001\u53CB\u597D\u7684 AI

@@ -7,6 +7,7 @@ public class Orchestrator : MonoBehaviour
 {
     [SerializeField] private TMP_InputField inputField;
     [SerializeField] private Qwen3 qwen3;
+    [SerializeField] private Qwen3TTS qwen3TTS;
     [SerializeField] private TMP_Text outputText;
 
     [SerializeField] private bool think;
@@ -15,6 +16,7 @@ public class Orchestrator : MonoBehaviour
                                              "请根据用户的问题给出自然、准确的回答。";
 
     private readonly StringBuilder streamBuffer = new StringBuilder();
+    private readonly StringBuilder responseBuffer = new StringBuilder();
     private bool insideThink;
 
     private const string ThinkStart = "<think>";
@@ -36,6 +38,7 @@ public class Orchestrator : MonoBehaviour
 
         // 重置上一次生成的过滤状态
         streamBuffer.Clear();
+        responseBuffer.Clear();
         insideThink = false;
 
         string prompt =
@@ -55,7 +58,13 @@ public class Orchestrator : MonoBehaviour
         // 生成结束，输出剩余的普通文本
         if (!insideThink && streamBuffer.Length > 0)
         {
-            outputText.text += streamBuffer.ToString();
+            AppendVisibleText(streamBuffer.ToString());
+            streamBuffer.Clear();
+        }
+
+        if (qwen3TTS != null && responseBuffer.Length > 0)
+        {
+            await qwen3TTS.SpeakAsync(responseBuffer.ToString().Trim());
         }
 
         streamBuffer.Clear();
@@ -105,7 +114,7 @@ public class Orchestrator : MonoBehaviour
                 {
                     if (startIndex > 0)
                     {
-                        outputText.text += buffer.Substring(0, startIndex);
+                        AppendVisibleText(buffer.Substring(0, startIndex));
                     }
 
                     streamBuffer.Remove(
@@ -121,13 +130,22 @@ public class Orchestrator : MonoBehaviour
 
                 if (safeLength > 0)
                 {
-                    outputText.text += buffer.Substring(0, safeLength);
+                    AppendVisibleText(buffer.Substring(0, safeLength));
                     streamBuffer.Remove(0, safeLength);
                 }
 
                 return;
             }
         }
+    }
+
+    private void AppendVisibleText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        outputText.text += text;
+        responseBuffer.Append(text);
     }
 
     private void OnDestroy()
