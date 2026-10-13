@@ -15,13 +15,33 @@
 
 ## 下载与运行
 
-从 [Releases](https://github.com/ck-711/Desktop-Agent/releases) 下载最新 Windows 包。完整安装包体积较大，会被拆分为多个附件发布。
+从 [Releases](https://github.com/ck-711/Desktop-Agent/releases) 下载最新 Windows 包。为控制发布包体积，Release **不包含模型文件**。
 
-1. 下载同一版本的全部 `Desktop-Agent-windows-x64-*.tar` 文件。
-2. 将每个 TAR 文件解压到同一个空目录。Windows 10/11 可在终端使用 `tar -xf <文件名>`，或用支持 TAR 的解压工具完成此操作。
-3. 解压完成后运行 `Desktop Agent.exe`。
+1. 下载 `Desktop-Agent-windows-x64-no-models.zip` 并解压。
+2. 按下方“获取模型”章节准备模型文件。
+3. 运行 `Desktop Agent.exe`。
 
 请勿单独移动 `Desktop Agent.exe`：它需要与 `Desktop Agent_Data`、`MonoBleedingEdge` 等同级目录共同存在。
+
+## 获取模型
+
+Release 不再分发任何模型权重。你可以从 [ModelScope](https://modelscope.cn/) 或 [Hugging Face](https://huggingface.co/) 下载与下列文件名兼容的模型；下载、使用或再分发前，请自行确认各模型的许可证和使用条款。
+
+将模型放入解压目录中的 `Desktop Agent_Data/StreamingAssets/models`，目录结构应如下：
+
+```text
+models/
+  Qwen3-1.7B-Q4_K_M.gguf
+  qwen3-asr-0.6b-q8_0.gguf
+  qwen3-tts-0.6b-f16.gguf
+  qwen3-tts-tokenizer-f16.gguf
+  Qwen3-TTS-12Hz-0.6B-Base/
+    model.safetensors
+    config.json
+    ...
+```
+
+其中，`Qwen3-TTS-12Hz-0.6B-Base` 目录应包含其完整的配置、词表和 `speech_tokenizer` 子目录。项目不会在首次运行时自动下载模型；缺少任一模型时，对应的文本生成、语音识别或语音合成功能将不可用。
 
 ## 系统要求
 
