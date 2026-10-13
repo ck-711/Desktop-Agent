@@ -12,6 +12,7 @@ public class Orchestrator : MonoBehaviour
     [SerializeField] private TMP_Text outputText;
     [SerializeField] private FaceController expressionController;
     [SerializeField] private KleeAnimationController animationController;
+    [SerializeField] private ConversationMemory memory;
 
     [SerializeField] private bool think;
     [TextArea(1, 6)]
@@ -20,6 +21,7 @@ public class Orchestrator : MonoBehaviour
     private readonly StringBuilder streamBuffer = new StringBuilder();
     private readonly StringBuilder speechBuffer = new StringBuilder();
     private readonly StringBuilder controlTagBuffer = new StringBuilder();
+    private readonly StringBuilder assistantMemoryBuffer = new StringBuilder();
     private bool insideThink;
     private bool isGenerating;
 
@@ -39,6 +41,11 @@ public class Orchestrator : MonoBehaviour
         if (animationController == null)
         {
             animationController = GetComponent<KleeAnimationController>();
+        }
+
+        if (memory == null)
+        {
+            memory = GetComponent<ConversationMemory>();
         }
 
         inputField.onSubmit.AddListener(OnInputSubmit);
@@ -61,12 +68,22 @@ private async void OnInputSubmit(string input)
         streamBuffer.Clear();
         speechBuffer.Clear();
         controlTagBuffer.Clear();
+        assistantMemoryBuffer.Clear();
         insideThink = false;
+
+        string memoryPrompt = memory != null
+            ? memory.BuildPrompt()
+            : string.Empty;
+        if (memory != null)
+        {
+            memory.RecordUser(input);
+        }
 
         string prompt =
             "<|im_start|>system\n" +
             systemPrompt +
             "<|im_end|>\n" +
+            memoryPrompt +
             "<|im_start|>user\n" +
             (!think ? "/no_think\n" : "/think\n") +
             input +
@@ -84,6 +101,11 @@ private async void OnInputSubmit(string input)
 
             FlushControlTagBuffer();
             FlushSpeechBuffer();
+
+            if (memory != null)
+            {
+                memory.RecordAssistant(assistantMemoryBuffer.ToString());
+            }
         }
         finally
         {
@@ -231,6 +253,7 @@ private async void OnInputSubmit(string input)
         }
 
         outputText.text += text;
+        assistantMemoryBuffer.Append(text);
         speechBuffer.Append(text);
         QueueCompletedSentences();
     }

@@ -2034,6 +2034,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bfba4ccd3f854e64f868ce83553071a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VRM10::UniVRM10.Vrm10Instance
+--- !u!95 &877847633 stripped
+Animator:
+  m_CorrespondingSourceObject: {fileID: 4870552773557632513, guid: 17874cb9bbfd009418fdbafb1fa1ef24, type: 3}
+  m_PrefabInstance: {fileID: 419310158}
+  m_PrefabAsset: {fileID: 0}
 --- !u!21 &881883403
 Material:
   serializedVersion: 8
@@ -3014,6 +3019,7 @@ GameObject:
   - component: {fileID: 1679321039}
   - component: {fileID: 1679321040}
   - component: {fileID: 1679321041}
+  - component: {fileID: 1679321042}
   m_Layer: 0
   m_Name: Klee
   m_TagString: Untagged
@@ -3120,6 +3126,7 @@ MonoBehaviour:
   outputText: {fileID: 1687997528}
   expressionController: {fileID: 1679321040}
   animationController: {fileID: 1679321041}
+  memory: {fileID: 1679321042}
   think: 1
   systemPrompt: "- \u4F60\u662F\u539F\u795E\u7684\u53EF\u8389\uFF0C\u6211\u4EEC\u5173\u7CFB\u5F88\u4EB2\u5BC6\uFF0C\u5E73\u65F6\u8BF4\u8BDD\u5F88\u968F\u610F\u3002\n-
     \u4E3A\u4E86\u8BA9\u5BF9\u8BDD\u66F4\u8F7B\u677E\u81EA\u7136\uFF0C\u8BF7\u63A7\u5236\u572850\u5B57\u4EE5\u5185\uFF0C\u6700\u591A\u4E24\u53E5\u8BDD\u3002\n-
@@ -3201,8 +3208,24 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9cca97851dc0b7d41ba13c43c395758f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::KleeAnimationController
-  animator: {fileID: 0}
+  animator: {fileID: 877847633}
   transitionDuration: 0.15
+--- !u!114 &1679321042
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1679321031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bf32b7f8b7429304c99117d7a446d1a4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ConversationMemory
+  maxTurns: 6
+  maxCharacters: 1800
+  persistAcrossSessions: 1
+  fileName: conversation_memory.json
 --- !u!1 &1687997527
 GameObject:
   m_ObjectHideFlags: 0
