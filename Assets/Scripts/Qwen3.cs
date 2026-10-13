@@ -126,6 +126,7 @@ public sealed class Qwen3 : MonoBehaviour
         });
 
         await generationTask;
+        DrainOutputQueue();
         OnFinished?.Invoke(result);
         return result;
     }
@@ -159,6 +160,11 @@ public sealed class Qwen3 : MonoBehaviour
     }
 
     private void Update()
+    {
+        DrainOutputQueue();
+    }
+
+    private void DrainOutputQueue()
     {
         while (outputQueue.TryDequeue(out string text))
         {

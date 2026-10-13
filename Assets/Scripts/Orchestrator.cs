@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Text;
 using TMPro;
@@ -12,12 +13,13 @@ public class Orchestrator : MonoBehaviour
 
     [SerializeField] private bool think;
 
-    [SerializeField] private string systemPrompt = "ÄãÊÇÒ»¸ö¼ò½à¡¢ÓÑºÃµÄ AI ÖúÊÖ¡£" +
-                                             "Çë¸ù¾İÓÃ»§µÄÎÊÌâ¸ø³ö×ÔÈ»¡¢×¼È·µÄ»Ø´ğ¡£";
+    [SerializeField] private string systemPrompt = "ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½à¡¢ï¿½ÑºÃµï¿½ AI ï¿½ï¿½ï¿½Ö¡ï¿½" +
+                                             "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È»ï¿½ï¿½×¼È·ï¿½Ä»Ø´ï¿½";
 
     private readonly StringBuilder streamBuffer = new StringBuilder();
-    private readonly StringBuilder responseBuffer = new StringBuilder();
+    private readonly StringBuilder speechBuffer = new StringBuilder();
     private bool insideThink;
+    private bool isGenerating;
 
     private const string ThinkStart = "<think>";
     private const string ThinkEnd = "</think>";
@@ -28,47 +30,50 @@ public class Orchestrator : MonoBehaviour
         qwen3.OnText += OnTextReceived;
     }
 
-    private async void OnInputSubmit(string input)
+private async void OnInputSubmit(string input)
     {
-        if (string.IsNullOrWhiteSpace(input))
+        if (string.IsNullOrWhiteSpace(input) ||
+            isGenerating ||
+            (qwen3TTS != null && qwen3TTS.IsBusy))
+        {
             return;
+        }
 
-        outputText.text += "\nÎÒ£º" + input + "\nAI£º";
+        isGenerating = true;
+        outputText.text += "\næˆ‘ï¼š" + input + "\nAIï¼š";
         inputField.text = "";
 
-        // ÖØÖÃÉÏÒ»´ÎÉú³ÉµÄ¹ıÂË×´Ì¬
         streamBuffer.Clear();
-        responseBuffer.Clear();
+        speechBuffer.Clear();
         insideThink = false;
 
         string prompt =
             "<|im_start|>system\n" +
             systemPrompt +
             "<|im_end|>\n" +
-
             "<|im_start|>user\n" +
             (!think ? "/no_think\n" : "/think\n") +
             input +
             "<|im_end|>\n" +
-
             "<|im_start|>assistant\n";
 
-        await qwen3.GenerateAsync(prompt);
-
-        // Éú³É½áÊø£¬Êä³öÊ£ÓàµÄÆÕÍ¨ÎÄ±¾
-        if (!insideThink && streamBuffer.Length > 0)
+        try
         {
-            AppendVisibleText(streamBuffer.ToString());
+            await qwen3.GenerateAsync(prompt);
+
+            if (!insideThink && streamBuffer.Length > 0)
+            {
+                AppendVisibleText(streamBuffer.ToString());
+            }
+
+            FlushSpeechBuffer();
+        }
+        finally
+        {
             streamBuffer.Clear();
+            isGenerating = false;
+            inputField.ActivateInputField();
         }
-
-        if (qwen3TTS != null && responseBuffer.Length > 0)
-        {
-            await qwen3TTS.SpeakAsync(responseBuffer.ToString().Trim());
-        }
-
-        streamBuffer.Clear();
-        inputField.ActivateInputField();
     }
 
     private void OnTextReceived(string text)
@@ -85,7 +90,7 @@ public class Orchestrator : MonoBehaviour
 
             if (insideThink)
             {
-                // Ë¼¿¼×´Ì¬£ºÑ°ÕÒ½áÊø±êÇ©
+                // Ë¼ï¿½ï¿½×´Ì¬ï¿½ï¿½Ñ°ï¿½Ò½ï¿½ï¿½ï¿½ï¿½ï¿½Ç©
                 int endIndex = buffer.IndexOf(
                     ThinkEnd, StringComparison.Ordinal);
 
@@ -96,7 +101,7 @@ public class Orchestrator : MonoBehaviour
                     continue;
                 }
 
-                // ±£Áô¿ÉÄÜÊôÓÚ¿ç token ±êÇ©µÄÎ²²¿×Ö·û
+                // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú¿ï¿½ token ï¿½ï¿½Ç©ï¿½ï¿½Î²ï¿½ï¿½ï¿½Ö·ï¿½
                 int keep = ThinkEnd.Length - 1;
 
                 if (streamBuffer.Length > keep)
@@ -106,7 +111,7 @@ public class Orchestrator : MonoBehaviour
             }
             else
             {
-                // ÆÕÍ¨»Ø´ğ×´Ì¬£ºÑ°ÕÒË¼¿¼¿ªÊ¼±êÇ©
+                // ï¿½ï¿½Í¨ï¿½Ø´ï¿½×´Ì¬ï¿½ï¿½Ñ°ï¿½ï¿½Ë¼ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½Ç©
                 int startIndex = buffer.IndexOf(
                     ThinkStart, StringComparison.Ordinal);
 
@@ -124,7 +129,7 @@ public class Orchestrator : MonoBehaviour
                     continue;
                 }
 
-                // Ôİ²»Êä³ö¿ÉÄÜÊôÓÚ¿ç token ±êÇ©µÄÎ²²¿×Ö·û
+                // ï¿½İ²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú¿ï¿½ token ï¿½ï¿½Ç©ï¿½ï¿½Î²ï¿½ï¿½ï¿½Ö·ï¿½
                 int safeLength = streamBuffer.Length
                                  - (ThinkStart.Length - 1);
 
@@ -139,14 +144,46 @@ public class Orchestrator : MonoBehaviour
         }
     }
 
-    private void AppendVisibleText(string text)
+private void AppendVisibleText(string text)
     {
         if (string.IsNullOrEmpty(text))
             return;
 
         outputText.text += text;
-        responseBuffer.Append(text);
+        speechBuffer.Append(text);
+        QueueCompletedSentences();
     }
+
+private void QueueCompletedSentences()
+    {
+        while (speechBuffer.Length > 0)
+        {
+            int sentenceEnd = speechBuffer.ToString().IndexOfAny(
+                new[] { 'ã€‚', 'ï¼', 'ï¼Ÿ', '.', '!', '?', 'ï¼›', ';', '\n' });
+            if (sentenceEnd < 0)
+                return;
+
+            string sentence = speechBuffer.ToString(0, sentenceEnd + 1).Trim();
+            speechBuffer.Remove(0, sentenceEnd + 1);
+            QueueSpeech(sentence);
+        }
+    }
+
+    private void FlushSpeechBuffer()
+    {
+        string sentence = speechBuffer.ToString().Trim();
+        speechBuffer.Clear();
+        QueueSpeech(sentence);
+    }
+
+    private void QueueSpeech(string sentence)
+    {
+        if (string.IsNullOrEmpty(sentence) || qwen3TTS == null)
+            return;
+
+        qwen3TTS.EnqueueSpeech(sentence);
+    }
+
 
     private void OnDestroy()
     {

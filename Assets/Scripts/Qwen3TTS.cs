@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -7,6 +8,8 @@ using UnityEngine;
 
 public class Qwen3TTS : MonoBehaviour
 {
+    private const string DllName = "qwen3tts";
+
     // =========================================================
     // C++ 参数结构体
     // 对应 qwen3tts_c_api.cpp 中的 Qwen3TtsParams
@@ -51,12 +54,19 @@ public class Qwen3TTS : MonoBehaviour
         public string error;
     }
 
+    private sealed class SpeechRequest
+    {
+        public string text;
+        public string speaker;
+        public string referencePath;
+    }
+
     // =========================================================
     // C++ DLL
     // =========================================================
 
     [DllImport(
-        "qwen3tts",
+        DllName,
         CallingConvention = CallingConvention.Cdecl,
         EntryPoint = "qwen3_tts_default_params",
         ExactSpelling = true)]
@@ -64,16 +74,17 @@ public class Qwen3TTS : MonoBehaviour
         out Qwen3TtsParams parameters);
 
     [DllImport(
-        "qwen3tts",
+        DllName,
         CallingConvention = CallingConvention.Cdecl,
         EntryPoint = "qwen3_tts_create",
         ExactSpelling = true)]
     private static extern IntPtr qwen3_tts_create(
+        [MarshalAs(UnmanagedType.LPUTF8Str)]
         string model_dir,
         int n_threads);
 
     [DllImport(
-        "qwen3tts",
+        DllName,
         CallingConvention = CallingConvention.Cdecl,
         EntryPoint = "qwen3_tts_is_loaded",
         ExactSpelling = true)]
@@ -81,39 +92,44 @@ public class Qwen3TTS : MonoBehaviour
         IntPtr tts);
 
     [DllImport(
-        "qwen3tts",
+        DllName,
         CallingConvention = CallingConvention.Cdecl,
         EntryPoint = "qwen3_tts_synthesize",
         ExactSpelling = true)]
     private static extern IntPtr qwen3_tts_synthesize(
         IntPtr tts,
+        [MarshalAs(UnmanagedType.LPUTF8Str)]
         string text,
         ref Qwen3TtsParams parameters);
 
     [DllImport(
-        "qwen3tts",
+        DllName,
         CallingConvention = CallingConvention.Cdecl,
         EntryPoint = "qwen3_tts_synthesize_custom_voice",
         ExactSpelling = true)]
     private static extern IntPtr qwen3_tts_synthesize_custom_voice(
         IntPtr tts,
+        [MarshalAs(UnmanagedType.LPUTF8Str)]
         string text,
+        [MarshalAs(UnmanagedType.LPUTF8Str)]
         string speaker,
         ref Qwen3TtsParams parameters);
 
     [DllImport(
-        "qwen3tts",
+        DllName,
         CallingConvention = CallingConvention.Cdecl,
         EntryPoint = "qwen3_tts_synthesize_with_voice_file",
         ExactSpelling = true)]
     private static extern IntPtr qwen3_tts_synthesize_with_voice_file(
         IntPtr tts,
+        [MarshalAs(UnmanagedType.LPUTF8Str)]
         string text,
+        [MarshalAs(UnmanagedType.LPUTF8Str)]
         string referenceAudioPath,
         ref Qwen3TtsParams parameters);
 
     [DllImport(
-        "qwen3tts",
+        DllName,
         CallingConvention = CallingConvention.Cdecl,
         EntryPoint = "qwen3_tts_free_audio",
         ExactSpelling = true)]
@@ -121,7 +137,7 @@ public class Qwen3TTS : MonoBehaviour
         IntPtr audio);
 
     [DllImport(
-        "qwen3tts",
+        DllName,
         CallingConvention = CallingConvention.Cdecl,
         EntryPoint = "qwen3_tts_destroy",
         ExactSpelling = true)]
@@ -129,7 +145,7 @@ public class Qwen3TTS : MonoBehaviour
         IntPtr tts);
 
     [DllImport(
-        "qwen3tts",
+        DllName,
         CallingConvention = CallingConvention.Cdecl,
         EntryPoint = "qwen3_tts_get_error",
         ExactSpelling = true)]
@@ -150,6 +166,16 @@ public class Qwen3TTS : MonoBehaviour
 
     [SerializeField]
     private int nThreads = 4;
+
+    [SerializeField]
+    [Min(1)]
+    [Tooltip("Qwen3-TTS language ID. Use 2055 for Chinese and 2050 for English.")]
+    private int languageId = 2055;
+
+    [SerializeField]
+    [Range(16, 512)]
+    [Tooltip("Hard limit for generated audio frames. Limits malformed output that never emits EOS.")]
+    private int maxAudioTokens = 128;
 
     [SerializeField]
     [Tooltip("Named CustomVoice speaker stored in the GGUF metadata, for example klee. Leave empty for Base/clone mode.")]
@@ -175,6 +201,15 @@ public class Qwen3TTS : MonoBehaviour
     private Qwen3TtsParams parameters;
     private Task<SynthesisResult> synthesisTask;
     private bool isShuttingDown;
+    private readonly Queue<SpeechRequest> synthesisQueue = new Queue<SpeechRequest>();
+    private readonly Queue<AudioClip> playbackQueue = new Queue<AudioClip>();
+    private bool isSynthesisWorkerRunning;
+    private bool isPlaybackWorkerRunning;
+
+    public bool IsBusy => isSynthesisWorkerRunning ||
+                          isPlaybackWorkerRunning ||
+                          synthesisQueue.Count > 0 ||
+                          playbackQueue.Count > 0;
 
 
     // =========================================================
@@ -230,6 +265,8 @@ public class Qwen3TTS : MonoBehaviour
 
         // 可以根据需要修改
         parameters.n_threads = nThreads;
+        parameters.language_id = languageId;
+        parameters.max_audio_tokens = maxAudioTokens;
 
         // -----------------------------------------------------
         // 3. 创建 Qwen3-TTS
@@ -291,11 +328,10 @@ public class Qwen3TTS : MonoBehaviour
 
 
 
-    public async Task SpeakAsync(string text)
+    public void EnqueueSpeech(string text)
     {
-        if (string.IsNullOrEmpty(text))
+        if (!HasSpeakableContent(text))
         {
-            Debug.LogWarning("Text is empty.");
             return;
         }
 
@@ -307,9 +343,9 @@ public class Qwen3TTS : MonoBehaviour
             return;
         }
 
-        if (synthesisTask != null && !synthesisTask.IsCompleted)
+        if (audioSource == null)
         {
-            Debug.LogWarning("Qwen3-TTS is already synthesizing audio.");
+            Debug.LogWarning("AudioSource is not assigned.");
             return;
         }
 
@@ -336,52 +372,120 @@ public class Qwen3TTS : MonoBehaviour
             }
         }
 
-        IntPtr handle = ttsHandle;
-        Qwen3TtsParams synthesisParameters = parameters;
-        synthesisTask = Task.Run(() => Synthesize(
-            handle,
-            text,
-            speaker,
-            resolvedReferencePath,
-            synthesisParameters));
+        synthesisQueue.Enqueue(new SpeechRequest
+        {
+            text = text,
+            speaker = speaker,
+            referencePath = resolvedReferencePath
+        });
 
-        SynthesisResult result;
+        if (!isSynthesisWorkerRunning)
+        {
+            _ = ProcessSynthesisQueueAsync();
+        }
+    }
+
+    private static bool HasSpeakableContent(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        foreach (char character in text)
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async Task ProcessSynthesisQueueAsync()
+    {
+        isSynthesisWorkerRunning = true;
         try
         {
-            result = await synthesisTask;
+            while (!isShuttingDown && synthesisQueue.Count > 0)
+            {
+                SpeechRequest request = synthesisQueue.Dequeue();
+                IntPtr handle = ttsHandle;
+                Qwen3TtsParams synthesisParameters = parameters;
+
+                synthesisTask = Task.Run(() => Synthesize(
+                    handle,
+                    request.text,
+                    request.speaker,
+                    request.referencePath,
+                    synthesisParameters));
+                SynthesisResult result = await synthesisTask;
+                synthesisTask = null;
+
+                if (result == null || result.pcm == null)
+                {
+                    Debug.LogError(result?.error ?? "Qwen3-TTS synthesis failed.");
+                    continue;
+                }
+
+                AudioClip clip = AudioClip.Create(
+                    "Qwen3TTS",
+                    result.pcm.Length,
+                    1,
+                    result.sampleRate,
+                    false);
+                clip.SetData(result.pcm, 0);
+                playbackQueue.Enqueue(clip);
+
+                if (!isPlaybackWorkerRunning)
+                {
+                    _ = ProcessPlaybackQueueAsync();
+                }
+            }
         }
         finally
         {
             synthesisTask = null;
+            isSynthesisWorkerRunning = false;
         }
+    }
 
-        if (isShuttingDown)
+    private async Task ProcessPlaybackQueueAsync()
+    {
+        isPlaybackWorkerRunning = true;
+        try
         {
-            return;
+            while (!isShuttingDown && playbackQueue.Count > 0)
+            {
+                AudioClip clip = playbackQueue.Dequeue();
+                audioSource.clip = clip;
+                audioSource.Play();
+                await WaitForPlaybackAsync(clip);
+            }
         }
-
-        if (result == null || result.pcm == null)
+        finally
         {
-            Debug.LogError(result?.error ?? "Qwen3-TTS synthesis failed.");
-            return;
+            isPlaybackWorkerRunning = false;
         }
+    }
 
-        AudioClip clip = AudioClip.Create(
-            "Qwen3TTS",
-            result.pcm.Length,
-            1,
-            result.sampleRate,
-            false);
-        clip.SetData(result.pcm, 0);
-
-        if (audioSource == null)
+    private async Task WaitForPlaybackAsync(AudioClip clip)
+    {
+        while (!isShuttingDown &&
+               audioSource != null &&
+               audioSource.clip == clip &&
+               audioSource.isPlaying)
         {
-            Debug.LogWarning("AudioSource is not assigned.");
-            return;
+            await Task.Yield();
         }
 
-        audioSource.clip = clip;
-        audioSource.Play();
+        if (audioSource != null && audioSource.clip == clip)
+        {
+            audioSource.clip = null;
+        }
+
+        Destroy(clip);
     }
 
     private static SynthesisResult Synthesize(

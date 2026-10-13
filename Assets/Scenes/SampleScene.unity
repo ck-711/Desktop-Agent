@@ -3035,6 +3035,8 @@ MonoBehaviour:
   modelPath: 
   audioSource: {fileID: 818079015}
   nThreads: 4
+  languageId: 2055
+  maxAudioTokens: 128
   customSpeaker: klee
   referenceAudioPath: 
   useGpu: 1
