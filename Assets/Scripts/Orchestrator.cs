@@ -10,22 +10,37 @@ public class Orchestrator : MonoBehaviour
     [SerializeField] private Qwen3 qwen3;
     [SerializeField] private Qwen3TTS qwen3TTS;
     [SerializeField] private TMP_Text outputText;
+    [SerializeField] private FaceController expressionController;
+    [SerializeField] private KleeAnimationController animationController;
 
     [SerializeField] private bool think;
-
-    [SerializeField] private string systemPrompt = "����һ����ࡢ�Ѻõ� AI ���֡�" +
-                                             "������û������������Ȼ��׼ȷ�Ļش�";
+    [TextArea(1, 6)]
+    [SerializeField] private string systemPrompt = "";
 
     private readonly StringBuilder streamBuffer = new StringBuilder();
     private readonly StringBuilder speechBuffer = new StringBuilder();
+    private readonly StringBuilder controlTagBuffer = new StringBuilder();
     private bool insideThink;
     private bool isGenerating;
 
     private const string ThinkStart = "<think>";
     private const string ThinkEnd = "</think>";
+    private const string FaceTagPrefix = "[face:";
+    private const string AnimationTagPrefix = "[anim:";
+    private const int LongestControlTagPrefixLength = 6;
 
     private void Start()
     {
+        if (expressionController == null)
+        {
+            expressionController = GetComponent<FaceController>();
+        }
+
+        if (animationController == null)
+        {
+            animationController = GetComponent<KleeAnimationController>();
+        }
+
         inputField.onSubmit.AddListener(OnInputSubmit);
         qwen3.OnText += OnTextReceived;
     }
@@ -45,6 +60,7 @@ private async void OnInputSubmit(string input)
 
         streamBuffer.Clear();
         speechBuffer.Clear();
+        controlTagBuffer.Clear();
         insideThink = false;
 
         string prompt =
@@ -66,6 +82,7 @@ private async void OnInputSubmit(string input)
                 AppendVisibleText(streamBuffer.ToString());
             }
 
+            FlushControlTagBuffer();
             FlushSpeechBuffer();
         }
         finally
@@ -144,14 +161,115 @@ private async void OnInputSubmit(string input)
         }
     }
 
-private void AppendVisibleText(string text)
+    private void AppendVisibleText(string text)
     {
         if (string.IsNullOrEmpty(text))
             return;
 
+        controlTagBuffer.Append(text);
+
+        while (controlTagBuffer.Length > 0)
+        {
+            string buffer = controlTagBuffer.ToString();
+            int faceTagStart = buffer.IndexOf(
+                FaceTagPrefix,
+                StringComparison.Ordinal);
+            int animationTagStart = buffer.IndexOf(
+                AnimationTagPrefix,
+                StringComparison.Ordinal);
+            int tagStart = FirstTagStart(faceTagStart, animationTagStart);
+            if (tagStart < 0)
+            {
+                int safeLength = controlTagBuffer.Length
+                                 - (LongestControlTagPrefixLength - 1);
+                if (safeLength <= 0)
+                {
+                    return;
+                }
+
+                AppendSpeakableText(buffer.Substring(0, safeLength));
+                controlTagBuffer.Remove(0, safeLength);
+                continue;
+            }
+
+            if (tagStart > 0)
+            {
+                AppendSpeakableText(buffer.Substring(0, tagStart));
+                controlTagBuffer.Remove(0, tagStart);
+                continue;
+            }
+
+            string tagPrefix = faceTagStart == 0
+                ? FaceTagPrefix
+                : AnimationTagPrefix;
+            int tagEnd = buffer.IndexOf(']');
+            if (tagEnd < 0)
+            {
+                return;
+            }
+
+            string tag = buffer.Substring(
+                tagPrefix.Length,
+                tagEnd - tagPrefix.Length);
+            controlTagBuffer.Remove(0, tagEnd + 1);
+            if (tagPrefix == FaceTagPrefix && expressionController != null)
+            {
+                expressionController.SetExpressionTag(tag);
+            }
+            else if (tagPrefix == AnimationTagPrefix && animationController != null)
+            {
+                animationController.SetAnimationTag(tag);
+            }
+        }
+    }
+
+    private void AppendSpeakableText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
         outputText.text += text;
         speechBuffer.Append(text);
         QueueCompletedSentences();
+    }
+
+    private void FlushControlTagBuffer()
+    {
+        if (controlTagBuffer.Length == 0)
+        {
+            return;
+        }
+
+        string remaining = controlTagBuffer.ToString();
+        controlTagBuffer.Clear();
+
+        if (!IsPartialControlTag(remaining))
+        {
+            AppendSpeakableText(remaining);
+        }
+    }
+
+    private static int FirstTagStart(int faceTagStart, int animationTagStart)
+    {
+        if (faceTagStart < 0)
+        {
+            return animationTagStart;
+        }
+
+        if (animationTagStart < 0)
+        {
+            return faceTagStart;
+        }
+
+        return Math.Min(faceTagStart, animationTagStart);
+    }
+
+    private static bool IsPartialControlTag(string text)
+    {
+        return FaceTagPrefix.StartsWith(text, StringComparison.Ordinal) ||
+               AnimationTagPrefix.StartsWith(text, StringComparison.Ordinal);
     }
 
 private void QueueCompletedSentences()

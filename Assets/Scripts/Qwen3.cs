@@ -22,7 +22,8 @@ public sealed class Qwen3 : MonoBehaviour
     private volatile bool cancelRequested;
     private Task generationTask;
 
-    private readonly ConcurrentQueue<string> outputQueue = new();
+    private readonly ConcurrentQueue<byte[]> outputQueue = new();
+    private readonly Decoder utf8Decoder = new UTF8Encoding(false, false).GetDecoder();
 
     public event Action<string> OnText;
     public event Action<Qwen3Status> OnFinished;
@@ -103,6 +104,10 @@ public sealed class Qwen3 : MonoBehaviour
         }
 
         cancelRequested = false;
+        while (outputQueue.TryDequeue(out _))
+        {
+        }
+        utf8Decoder.Reset();
         GCHandle selfHandle = GCHandle.Alloc(this);
 
         Qwen3Status result = Qwen3Status.InvalidArgument;
@@ -126,7 +131,7 @@ public sealed class Qwen3 : MonoBehaviour
         });
 
         await generationTask;
-        DrainOutputQueue();
+        DrainOutputQueue(flushUtf8Decoder: true);
         OnFinished?.Invoke(result);
         return result;
     }
@@ -155,7 +160,7 @@ public sealed class Qwen3 : MonoBehaviour
 
         byte[] bytes = new byte[(int)size];
         Marshal.Copy(text, bytes, 0, bytes.Length);
-        self.outputQueue.Enqueue(Encoding.UTF8.GetString(bytes));
+        self.outputQueue.Enqueue(bytes);
         return 0;
     }
 
@@ -164,9 +169,38 @@ public sealed class Qwen3 : MonoBehaviour
         DrainOutputQueue();
     }
 
-    private void DrainOutputQueue()
+    private void DrainOutputQueue(bool flushUtf8Decoder = false)
     {
-        while (outputQueue.TryDequeue(out string text))
+        while (outputQueue.TryDequeue(out byte[] bytes))
+        {
+            PublishDecodedText(bytes, false);
+        }
+
+        if (flushUtf8Decoder)
+        {
+            PublishDecodedText(Array.Empty<byte>(), true);
+        }
+    }
+
+    private void PublishDecodedText(byte[] bytes, bool flush)
+    {
+        int capacity = Mathf.Max(1, Encoding.UTF8.GetMaxCharCount(bytes.Length));
+        char[] characters = new char[capacity];
+        int count = utf8Decoder.GetChars(
+            bytes,
+            0,
+            bytes.Length,
+            characters,
+            0,
+            flush);
+        if (count == 0)
+        {
+            return;
+        }
+
+        string text = new string(characters, 0, count)
+            .Replace("\uFFFD", string.Empty);
+        if (!string.IsNullOrEmpty(text))
         {
             OnText?.Invoke(text);
         }
